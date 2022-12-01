@@ -14,7 +14,7 @@ SAMPLE_RATE = 16000
 N_FFT = 400
 N_MELS = 80
 HOP_LENGTH = 160
-CHUNK_LENGTH = 30
+CHUNK_LENGTH = 10
 N_SAMPLES = CHUNK_LENGTH * SAMPLE_RATE  # 480000: number of samples in a chunk
 N_FRAMES = exact_div(N_SAMPLES, HOP_LENGTH)  # 3000: number of frames in a mel spectrogram input
 
