@@ -132,24 +132,41 @@ class PyTorchInference(Inference):
         self.model: "Whisper" = model
         self.initial_token_length = initial_token_length
         self.kv_cache = {}
-        self.hooks = []
 
     def logits(self, tokens: Tensor, audio_features: Tensor) -> Tensor:
-        if not self.kv_cache:
-            self.kv_cache, self.hooks = self.model.install_kv_cache_hooks()
-
         if tokens.shape[-1] > self.initial_token_length:
             # only need to use the last token except in the first forward pass
             tokens = tokens[:, -1:]
 
-        return self.model.decoder(tokens, audio_features, kv_cache=self.kv_cache)
+        if len(self.kv_cache) == 0:
+            dummy_cache = torch.zeros([
+                tokens.size(0),
+                self.model.dims.n_text_layer,
+                0,
+                self.model.dims.n_text_state
+            ], dtype=audio_features.dtype, device=tokens.device)
+            self.kv_cache['k_cache'] = dummy_cache
+            self.kv_cache['v_cache'] = dummy_cache
+            self.kv_cache['xa_k_cache'] = dummy_cache
+            self.kv_cache['xa_v_cache'] = dummy_cache
+        
+        outputs, k_cache, v_cache, xa_k_cache, xa_v_cache = self.model.decoder(
+            tokens,
+            audio_features,
+            self.kv_cache['k_cache'],
+            self.kv_cache['v_cache'],
+            self.kv_cache['xa_k_cache'],
+            self.kv_cache['xa_v_cache']
+        )
+        self.kv_cache['k_cache'] = k_cache
+        self.kv_cache['v_cache'] = v_cache
+        self.kv_cache['xa_k_cache'] = xa_k_cache
+        self.kv_cache['xa_v_cache'] = xa_v_cache
+
+        return outputs
 
     def cleanup_caching(self):
-        for hook in self.hooks:
-            hook.remove()
-
         self.kv_cache = {}
-        self.hooks = []
 
     def rearrange_kv_cache(self, source_indices):
         for module, tensor in self.kv_cache.items():
